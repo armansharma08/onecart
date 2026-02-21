@@ -8,6 +8,8 @@ const uploadOnCloudinary = async(filePath) => {
         api_key: process.env.CLOUDINARY_API_KEY,
         api_secret: process.env.CLOUDINARY_SECRET_KEY
     });
+
+    console.log("CLOUD NAME IN PROD:", process.env.CLOUDINARY_NAME);
     try {
         if (!filePath) {
             return null
