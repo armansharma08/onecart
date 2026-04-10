@@ -76,6 +76,12 @@ const parseJsonFromText = (text) => {
     }
 }
 
+const AI_STOP_WORDS = new Set([
+    "suggest", "show", "me", "i", "want", "need", "find", "give", "products",
+    "product", "item", "items", "under", "below", "less", "than", "within",
+    "for", "with", "and", "or", "to", "the", "a", "an", "in", "on", "of"
+]);
+
 const parseFallbackFilters = (normalizedQuery) => {
     const budgetMatch = normalizedQuery.match(/(?:under|below|less than|within|max(?:imum)?|upto|up to)\s*₹?\s*(\d+)/);
     const budget = budgetMatch ? Number(budgetMatch[1]) : null;
@@ -85,18 +91,23 @@ const parseFallbackFilters = (normalizedQuery) => {
         subCategory = "Winterwear";
     }
 
-    const stopWords = new Set([
-        "suggest", "show", "me", "i", "want", "need", "find", "give", "products",
-        "product", "item", "items", "under", "below", "less", "than", "within",
-        "for", "with", "and", "or", "to", "the", "a", "an", "in", "on", "of"
-    ]);
-
     const keywords = normalizedQuery
         .split(/[\s,.-]+/)
         .map((word) => word.trim())
-        .filter((word) => word && !stopWords.has(word));
+        .filter((word) => word && !AI_STOP_WORDS.has(word) && !/^\d+$/.test(word));
 
     return { budget, category: "", subCategory, keywords };
+}
+
+const sanitizeKeywords = (rawKeywords = []) => {
+    if (!Array.isArray(rawKeywords)) {
+        return [];
+    }
+
+    return rawKeywords
+        .flatMap((word) => String(word || "").toLowerCase().split(/[\s,.-]+/))
+        .map((word) => word.trim())
+        .filter((word) => word && !AI_STOP_WORDS.has(word) && !/^\d+$/.test(word));
 }
 
 export const aiProductSearch = async(req, res) => {
@@ -138,13 +149,13 @@ Rules:
                     }, { timeout: 12000 },
                 );
 
-                const rawText = result?.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+                const rawText = result ? .data ? .candidates ? .[0] ? .content ? .parts ? .[0] ? .text || "";
                 const extractedData = parseJsonFromText(rawText);
                 if (extractedData) {
-                    budget = Number(extractedData?.budget) || null;
-                    category = extractedData?.category?.trim() || "";
-                    subCategory = extractedData?.subCategory?.trim() || "";
-                    keywords = Array.isArray(extractedData?.keywords) ? extractedData.keywords : [];
+                    budget = Number(extractedData ? .budget) || null;
+                    category = extractedData ? .category ? .trim() || "";
+                    subCategory = extractedData ? .subCategory ? .trim() || "";
+                    keywords = sanitizeKeywords(extractedData ? .keywords);
                 } else {
                     const fallback = parseFallbackFilters(normalizedQuery);
                     budget = fallback.budget;
@@ -153,7 +164,7 @@ Rules:
                     keywords = fallback.keywords;
                 }
             } catch (geminiError) {
-                console.log("Gemini call failed, using fallback parser", geminiError?.message || geminiError);
+                console.log("Gemini call failed, using fallback parser", geminiError ? .message || geminiError);
                 const fallback = parseFallbackFilters(normalizedQuery);
                 budget = fallback.budget;
                 category = fallback.category;
