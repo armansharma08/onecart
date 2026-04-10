@@ -9,7 +9,7 @@ import userRoutes from './routes/userRoutes.js'
 import productRoutes from './routes/productRoutes.js'
 import cartRoutes from './routes/cartRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
-import aiRoutes from "./routes/aiRoutes.js";
+
 
 let port = process.env.PORT || 6000
 
