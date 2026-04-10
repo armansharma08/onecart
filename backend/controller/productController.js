@@ -149,13 +149,13 @@ Rules:
                     }, { timeout: 12000 },
                 );
 
-                const rawText = result ? .data ? .candidates ? .[0] ? .content ? .parts ? .[0] ? .text || "";
+                const rawText = result?.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
                 const extractedData = parseJsonFromText(rawText);
                 if (extractedData) {
-                    budget = Number(extractedData ? .budget) || null;
-                    category = extractedData ? .category ? .trim() || "";
-                    subCategory = extractedData ? .subCategory ? .trim() || "";
-                    keywords = sanitizeKeywords(extractedData ? .keywords);
+                    budget = Number(extractedData?.budget) || null;
+                    category = extractedData?.category?.trim() || "";
+                    subCategory = extractedData?.subCategory?.trim() || "";
+                    keywords = sanitizeKeywords(extractedData?.keywords);
                 } else {
                     const fallback = parseFallbackFilters(normalizedQuery);
                     budget = fallback.budget;
@@ -164,7 +164,7 @@ Rules:
                     keywords = fallback.keywords;
                 }
             } catch (geminiError) {
-                console.log("Gemini call failed, using fallback parser", geminiError ? .message || geminiError);
+                console.log("Gemini call failed, using fallback parser", geminiError?.message || geminiError);
                 const fallback = parseFallbackFilters(normalizedQuery);
                 budget = fallback.budget;
                 category = fallback.category;
