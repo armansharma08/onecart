@@ -76,6 +76,29 @@ const parseJsonFromText = (text) => {
     }
 }
 
+const parseFallbackFilters = (normalizedQuery) => {
+    const budgetMatch = normalizedQuery.match(/(?:under|below|less than|within|max(?:imum)?|upto|up to)\s*₹?\s*(\d+)/);
+    const budget = budgetMatch ? Number(budgetMatch[1]) : null;
+
+    let subCategory = "";
+    if (normalizedQuery.includes("jacket") || normalizedQuery.includes("hoodie") || normalizedQuery.includes("sweater")) {
+        subCategory = "Winterwear";
+    }
+
+    const stopWords = new Set([
+        "suggest", "show", "me", "i", "want", "need", "find", "give", "products",
+        "product", "item", "items", "under", "below", "less", "than", "within",
+        "for", "with", "and", "or", "to", "the", "a", "an", "in", "on", "of"
+    ]);
+
+    const keywords = normalizedQuery
+        .split(/[\s,.-]+/)
+        .map((word) => word.trim())
+        .filter((word) => word && !stopWords.has(word));
+
+    return { budget, category: "", subCategory, keywords };
+}
+
 export const aiProductSearch = async(req, res) => {
     try {
         const { query } = req.body;
@@ -108,26 +131,41 @@ Rules:
 - keywords should include useful product intent words only.
 - response must be strict JSON, no markdown.`;
 
-            const result = await axios.post(
-                `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-                    contents: [{ parts: [{ text: prompt }] }],
-                },
-            );
+            try {
+                const result = await axios.post(
+                    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+                        contents: [{ parts: [{ text: prompt }] }],
+                    }, { timeout: 12000 },
+                );
 
-            const rawText = result?.data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-            const extractedData = parseJsonFromText(rawText);
-            budget = Number(extractedData?.budget) || null;
-            category = extractedData?.category?.trim() || "";
-            subCategory = extractedData?.subCategory?.trim() || "";
-            keywords = Array.isArray(extractedData?.keywords) ? extractedData.keywords : [];
-        } else {
-            const budgetMatch = normalizedQuery.match(/(?:under|below|less than|within)\s*₹?\s*(\d+)/);
-            budget = budgetMatch ? Number(budgetMatch[1]) : null;
-
-            if (normalizedQuery.includes("jacket")) {
-                subCategory = "WinterWear";
+                const rawText = result ? .data ? .candidates ? .[0] ? .content ? .parts ? .[0] ? .text || "";
+                const extractedData = parseJsonFromText(rawText);
+                if (extractedData) {
+                    budget = Number(extractedData ? .budget) || null;
+                    category = extractedData ? .category ? .trim() || "";
+                    subCategory = extractedData ? .subCategory ? .trim() || "";
+                    keywords = Array.isArray(extractedData ? .keywords) ? extractedData.keywords : [];
+                } else {
+                    const fallback = parseFallbackFilters(normalizedQuery);
+                    budget = fallback.budget;
+                    category = fallback.category;
+                    subCategory = fallback.subCategory;
+                    keywords = fallback.keywords;
+                }
+            } catch (geminiError) {
+                console.log("Gemini call failed, using fallback parser", geminiError ? .message || geminiError);
+                const fallback = parseFallbackFilters(normalizedQuery);
+                budget = fallback.budget;
+                category = fallback.category;
+                subCategory = fallback.subCategory;
+                keywords = fallback.keywords;
             }
-            keywords = normalizedQuery.split(" ").filter(Boolean);
+        } else {
+            const fallback = parseFallbackFilters(normalizedQuery);
+            budget = fallback.budget;
+            category = fallback.category;
+            subCategory = fallback.subCategory;
+            keywords = fallback.keywords;
         }
 
         let filteredProducts = products.slice();
@@ -144,7 +182,7 @@ Rules:
         if (keywords.length > 0) {
             filteredProducts = filteredProducts.filter((item) => {
                 const haystack = `${item.name} ${item.description} ${item.category} ${item.subCategory}`.toLowerCase();
-                return keywords.some((word) => haystack.includes(String(word).toLowerCase()));
+                return keywords.every((word) => haystack.includes(String(word).toLowerCase()));
             });
         }
 
