@@ -27,7 +27,6 @@ app.use("/api/user", userRoutes)
 app.use("/api/product", productRoutes)
 app.use("/api/cart", cartRoutes)
 app.use("/api/order", orderRoutes)
-app.use("/api/ai", aiRoutes)
 
 
 
