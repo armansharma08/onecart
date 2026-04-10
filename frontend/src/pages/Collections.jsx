@@ -4,15 +4,22 @@ import { FaChevronDown } from "react-icons/fa";
 import Title from '../component/Title';
 import { shopDataContext } from '../context/ShopContext';
 import Card from '../component/Card';
+import { authDataContext } from '../context/AuthContext';
+import axios from 'axios';
+import { toast } from 'react-toastify';
 
 function Collections() {
 
     let [showFilter,setShowFilter] = useState(false)
     let {products,search,showSearch} = useContext(shopDataContext)
+    let { serverUrl } = useContext(authDataContext)
     let [filterProduct,setFilterProduct] = useState([])
     let [category,setCaterory] = useState([])
     let [subCategory,setSubCaterory] = useState([])
     let [sortType,SetSortType] = useState("relavent")
+    let [aiQuery, setAiQuery] = useState("")
+    let [aiLoading, setAiLoading] = useState(false)
+    let [aiMessage, setAiMessage] = useState("")
 
     const toggleCategory = (e) =>{
         if(category.includes(e.target.value)){
@@ -82,6 +89,31 @@ function Collections() {
         applyFilter()
     },[category,subCategory,search ,showSearch])
 
+    const handleAiSearch = async () => {
+        if (!aiQuery.trim()) {
+            toast.error("Enter a query for AI suggestions")
+            return
+        }
+
+        try {
+            setAiLoading(true)
+            const result = await axios.post(`${serverUrl}/api/product/ai-search`, { query: aiQuery })
+            setFilterProduct(result.data.products || [])
+            setAiMessage(result.data.message || "AI suggestions loaded")
+        } catch (error) {
+            console.log(error)
+            toast.error("Could not fetch AI suggestions")
+            setAiMessage("")
+        } finally {
+            setAiLoading(false)
+        }
+    }
+
+    const resetAiSearch = () => {
+        setAiQuery("")
+        setAiMessage("")
+        applyFilter()
+    }
 
 
 
@@ -122,6 +154,32 @@ function Collections() {
                 <option value="low-high" className='w-[100%] h-[100%]'>Sort By: Low to High</option>
                 <option value="high-low" className='w-[100%] h-[100%]'>Sort By: High to Low</option>
             </select>
+        </div>
+        <div className='lg:w-[80vw] w-[100vw] px-[20px] lg:px-[50px] mt-[15px] flex flex-col gap-[10px]'>
+            <p className='text-[#aaf5fa] text-[18px] font-semibold'>AI Shopping Assistant</p>
+            <div className='flex flex-col md:flex-row gap-[10px]'>
+                <input
+                    type="text"
+                    value={aiQuery}
+                    onChange={(e)=>setAiQuery(e.target.value)}
+                    placeholder='Try: suggest jackets under 3000'
+                    className='w-full md:w-[65%] h-[45px] rounded-lg bg-slate-700 text-white px-[12px] border-[1px] border-slate-400 outline-none'
+                />
+                <button
+                    onClick={handleAiSearch}
+                    disabled={aiLoading}
+                    className='h-[45px] px-[18px] bg-[#00d2fc] text-black font-semibold rounded-lg cursor-pointer disabled:opacity-60'
+                >
+                    {aiLoading ? "Searching..." : "Get Suggestions"}
+                </button>
+                <button
+                    onClick={resetAiSearch}
+                    className='h-[45px] px-[18px] bg-slate-500 text-white font-semibold rounded-lg cursor-pointer'
+                >
+                    Clear
+                </button>
+            </div>
+            {aiMessage && <p className='text-[#d2edf5] text-[14px]'>{aiMessage}</p>}
         </div>
         <div className='lg:w-[80vw] md:w-[60vw]   w-[100vw] min-h-[70vh] flex items-center justify-center flex-wrap gap-[30px]'>
             {
