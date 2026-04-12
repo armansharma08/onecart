@@ -1,10 +1,10 @@
 # 🛒 OneCart - E-Commerce Platform
 
 ## 🔗 Live Demo
-https://your-frontend-link
+https://onecart-frontend1-xbel.onrender.com 
 
 ## 🛠️ Admin Panel
-https://your-admin-link
+https://onecart-admin-ef3c.onrender.com
 
 ## ⚙️ Backend API
 https://onecart-backend-6jiy.onrender.com
@@ -15,3 +15,5 @@ https://onecart-backend-6jiy.onrender.com
 - Cloudinary Image Upload
 - Razorpay Payment Integration
 - Cart & Order System
+- AI Suggestions (Using Gemini api key)
+- Voice Navifation
