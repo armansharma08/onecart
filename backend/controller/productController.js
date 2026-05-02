@@ -82,21 +82,68 @@ const AI_STOP_WORDS = new Set([
     "for", "with", "and", "or", "to", "the", "a", "an", "in", "on", "of"
 ]);
 
+const normalizeToken = (word = "") => {
+    const cleaned = String(word).toLowerCase().trim();
+    if (!cleaned) return "";
+    if (cleaned.endsWith("ies")) return `${cleaned.slice(0, -3)}y`;
+    if (cleaned.endsWith("s") && cleaned.length > 3) return cleaned.slice(0, -1);
+    return cleaned;
+}
+
+const detectPriceRange = (normalizedQuery) => {
+    const betweenMatch = normalizedQuery.match(/between\s*₹?\s*(\d+)\s*(?:and|-)\s*₹?\s*(\d+)/);
+    if (betweenMatch) {
+        const first = Number(betweenMatch[1]);
+        const second = Number(betweenMatch[2]);
+        return { minBudget: Math.min(first, second), budget: Math.max(first, second) };
+    }
+
+    const aboveMatch = normalizedQuery.match(/(?:above|over|more than|greater than)\s*₹?\s*(\d+)/);
+    if (aboveMatch) {
+        return { minBudget: Number(aboveMatch[1]), budget: null };
+    }
+
+    const underMatch = normalizedQuery.match(/(?:under|below|less than|within|max(?:imum)?|upto|up to)\s*₹?\s*(\d+)/);
+    if (underMatch) {
+        return { minBudget: null, budget: Number(underMatch[1]) };
+    }
+
+    const aroundMatch = normalizedQuery.match(/(?:around|near|about)\s*₹?\s*(\d+)/);
+    if (aroundMatch) {
+        const target = Number(aroundMatch[1]);
+        const variance = Math.round(target * 0.2);
+        return { minBudget: Math.max(target - variance, 0), budget: target + variance };
+    }
+
+    return { minBudget: null, budget: null };
+}
+
 const parseFallbackFilters = (normalizedQuery) => {
-    const budgetMatch = normalizedQuery.match(/(?:under|below|less than|within|max(?:imum)?|upto|up to)\s*₹?\s*(\d+)/);
-    const budget = budgetMatch ? Number(budgetMatch[1]) : null;
+    const { minBudget, budget } = detectPriceRange(normalizedQuery);
 
     let subCategory = "";
     if (normalizedQuery.includes("jacket") || normalizedQuery.includes("hoodie") || normalizedQuery.includes("sweater")) {
         subCategory = "Winterwear";
     }
+    if (!subCategory && (normalizedQuery.includes("shirt") || normalizedQuery.includes("tshirt") || normalizedQuery.includes("top"))) {
+        subCategory = "TopWear";
+    }
+
+    let category = "";
+    if (normalizedQuery.includes("men") || normalizedQuery.includes("male") || normalizedQuery.includes("boy")) {
+        category = "Men";
+    } else if (normalizedQuery.includes("women") || normalizedQuery.includes("female") || normalizedQuery.includes("girl")) {
+        category = "Women";
+    } else if (normalizedQuery.includes("kid") || normalizedQuery.includes("child")) {
+        category = "Kids";
+    }
 
     const keywords = normalizedQuery
         .split(/[\s,.-]+/)
-        .map((word) => word.trim())
+        .map((word) => normalizeToken(word))
         .filter((word) => word && !AI_STOP_WORDS.has(word) && !/^\d+$/.test(word));
 
-    return { budget, category: "", subCategory, keywords };
+    return { minBudget, budget, category, subCategory, keywords };
 }
 
 const sanitizeKeywords = (rawKeywords = []) => {
@@ -106,7 +153,7 @@ const sanitizeKeywords = (rawKeywords = []) => {
 
     return rawKeywords
         .flatMap((word) => String(word || "").toLowerCase().split(/[\s,.-]+/))
-        .map((word) => word.trim())
+        .map((word) => normalizeToken(word))
         .filter((word) => word && !AI_STOP_WORDS.has(word) && !/^\d+$/.test(word));
 }
 
@@ -121,6 +168,8 @@ export const aiProductSearch = async(req, res) => {
         const products = await Product.find({});
         const normalizedQuery = query.toLowerCase();
         const apiKey = process.env.GOOGLE_API_KEY;
+        const detectedRange = detectPriceRange(normalizedQuery);
+        let minBudget = detectedRange.minBudget;
         let budget = null;
         let category = "";
         let subCategory = "";
@@ -156,8 +205,12 @@ Rules:
                     category = extractedData?.category?.trim() || "";
                     subCategory = extractedData?.subCategory?.trim() || "";
                     keywords = sanitizeKeywords(extractedData?.keywords);
+                    if (detectedRange.budget !== null) {
+                        budget = detectedRange.budget;
+                    }
                 } else {
                     const fallback = parseFallbackFilters(normalizedQuery);
+                    minBudget = fallback.minBudget;
                     budget = fallback.budget;
                     category = fallback.category;
                     subCategory = fallback.subCategory;
@@ -166,6 +219,7 @@ Rules:
             } catch (geminiError) {
                 console.log("Gemini call failed, using fallback parser", geminiError?.message || geminiError);
                 const fallback = parseFallbackFilters(normalizedQuery);
+                minBudget = fallback.minBudget;
                 budget = fallback.budget;
                 category = fallback.category;
                 subCategory = fallback.subCategory;
@@ -173,6 +227,7 @@ Rules:
             }
         } else {
             const fallback = parseFallbackFilters(normalizedQuery);
+            minBudget = fallback.minBudget;
             budget = fallback.budget;
             category = fallback.category;
             subCategory = fallback.subCategory;
@@ -181,6 +236,9 @@ Rules:
 
         let filteredProducts = products.slice();
 
+        if (minBudget !== null) {
+            filteredProducts = filteredProducts.filter((item) => item.price >= minBudget);
+        }
         if (budget) {
             filteredProducts = filteredProducts.filter((item) => item.price <= budget);
         }
@@ -200,7 +258,7 @@ Rules:
         return res.status(200).json({
             message: `Found ${filteredProducts.length} product(s) for "${query}"`,
             products: filteredProducts,
-            filtersApplied: { budget, category, subCategory, keywords },
+            filtersApplied: { minBudget, budget, category, subCategory, keywords },
         });
     } catch (error) {
         console.log("AiProductSearch error", error);
