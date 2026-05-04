@@ -82,12 +82,58 @@ const AI_STOP_WORDS = new Set([
     "for", "with", "and", "or", "to", "the", "a", "an", "in", "on", "of"
 ]);
 
+const SEMANTIC_SYNONYMS = {
+    jacket: ["coat", "outerwear", "winterwear", "puffer", "parka"],
+    hoodie: ["sweatshirt", "hooded", "pullover"],
+    sweater: ["jumper", "knitwear"],
+    shirt: ["top", "tee", "tshirt"],
+    tshirt: ["tee", "top", "shirt"],
+    topwear: ["shirt", "tshirt", "tee", "top"],
+    winterwear: ["jacket", "hoodie", "sweater", "coat", "outerwear"],
+    cheap: ["affordable", "budget", "lowcost", "economy"],
+    affordable: ["cheap", "budget", "economy", "lowprice"],
+    black: ["dark"],
+    pink: ["rose", "blush"],
+}
+
 const normalizeToken = (word = "") => {
     const cleaned = String(word).toLowerCase().trim();
     if (!cleaned) return "";
     if (cleaned.endsWith("ies")) return `${cleaned.slice(0, -3)}y`;
     if (cleaned.endsWith("s") && cleaned.length > 3) return cleaned.slice(0, -1);
     return cleaned;
+}
+
+const buildSemanticTokenSet = (tokens = []) => {
+    const seed = tokens.map((word) => normalizeToken(word)).filter(Boolean);
+    const semanticSet = new Set(seed);
+
+    seed.forEach((token) => {
+        const related = SEMANTIC_SYNONYMS[token] || [];
+        related.forEach((item) => semanticSet.add(normalizeToken(item)));
+    });
+
+    return semanticSet;
+}
+
+const scoreSemanticMatch = (item, queryTokens = []) => {
+    if (!queryTokens.length) return 0;
+
+    const haystackTokens = String(`${item.name || ""} ${item.description || ""} ${item.category || ""} ${item.subCategory || ""}`)
+        .toLowerCase()
+        .split(/[\s,.-]+/)
+        .map((word) => normalizeToken(word))
+        .filter(Boolean);
+
+    const haystackSet = new Set(haystackTokens);
+    const querySemanticSet = buildSemanticTokenSet(queryTokens);
+
+    let hitCount = 0;
+    querySemanticSet.forEach((token) => {
+        if (haystackSet.has(token)) hitCount += 1;
+    });
+
+    return hitCount / Math.max(querySemanticSet.size, 1);
 }
 
 const detectPriceRange = (normalizedQuery) => {
@@ -253,6 +299,16 @@ Rules:
                 const haystack = `${item.name} ${item.description} ${item.category} ${item.subCategory}`.toLowerCase();
                 return keywords.every((word) => haystack.includes(String(word).toLowerCase()));
             });
+
+            if (filteredProducts.length === 0) {
+                const semanticMatches = products
+                    .map((item) => ({ item, score: scoreSemanticMatch(item, keywords) }))
+                    .filter(({ score }) => score >= 0.2)
+                    .sort((a, b) => b.score - a.score)
+                    .map(({ item }) => item);
+
+                filteredProducts = semanticMatches;
+            }
         }
 
         return res.status(200).json({
